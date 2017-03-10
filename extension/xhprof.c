@@ -274,7 +274,7 @@ static void clear_frequencies();
 static void hp_free_the_free_list();
 static hp_entry_t *hp_fast_alloc_hprof_entry();
 static void hp_fast_free_hprof_entry(hp_entry_t *p);
-static inline uint8 hp_inline_hash(char * str);
+static inline uint8 hp_inline_hash(char *str);
 static void get_all_cpu_frequencies();
 static long get_us_interval(struct timeval *start, struct timeval *end);
 static void incr_us_interval(struct timeval *start, uint64 incr);
