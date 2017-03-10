@@ -1178,7 +1178,7 @@ void hp_sample_stack(hp_entry_t  **entries  TSRMLS_DC) {
                    key,
                    ZSTR_VAL(symbol));
 
-  zend_string_free(symbol);
+  zend_string_release(symbol);
   return;
 }
 
@@ -1674,7 +1674,7 @@ ZEND_DLEXPORT void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC) {
   if (hp_globals.entries) {
     END_PROFILING(&(hp_globals.entries), hp_profile_flag);
   }
-  zend_string_free(func);
+  zend_string_release(func);
 }
 
 #undef EX
@@ -1737,7 +1737,7 @@ ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data, zval *re
     if (hp_globals.entries) {
       END_PROFILING(&hp_globals.entries, hp_profile_flag);
     }
-    zend_string_free(func);
+    zend_string_release(func);
   }
 
 }
