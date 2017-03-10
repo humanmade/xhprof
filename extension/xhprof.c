@@ -19,11 +19,6 @@
 #include "config.h"
 #endif
 
-#ifdef linux
-/* To enable CPU_ZERO and CPU_SET, etc.     */
-# define _GNU_SOURCE
-#endif
-
 #include "php.h"
 #include "php_ini.h"
 #include "ext/standard/info.h"
