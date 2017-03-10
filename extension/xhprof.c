@@ -818,7 +818,7 @@ int  hp_ignore_entry_work(uint8 hash_code, zend_string *curr_func) {
     int i = 0;
     for (; hp_globals.ignored_function_names[i] != NULL; i++) {
       char *name = hp_globals.ignored_function_names[i];
-      if ( !strcmp(ZSTR_VAL(curr_func), name)) {
+      if (!zend_string_equals_literal(curr_func, name)) {
         ignore++;
         break;
       }
@@ -1446,7 +1446,7 @@ void hp_mode_common_beginfn(hp_entry_t **entries,
   if (hp_globals.func_hash_counters[current->hash_code] > 0) {
     /* Find this symbols recurse level */
     for(p = (*entries); p; p = p->prev_hprof) {
-      if (ZSTR_LEN(current->name_hprof) != ZSTR_LEN(p->name_hprof) || !strncmp(ZSTR_VAL(current->name_hprof), ZSTR_VAL(p->name_hprof), ZSTR_LEN(current->name_hprof))) {
+      if (!zend_string_equals(current->name_hprof, p->name_hprof)) {
         recurse_level = (p->rlvl_hprof) + 1;
         break;
       }
