@@ -228,21 +228,12 @@ typedef struct hp_global_t {
 /* XHProf global state */
 static hp_global_t       hp_globals;
 
-#if PHP_VERSION_ID < 50500
-/* Pointer to the original execute function */
-static ZEND_DLEXPORT void (*_zend_execute) (zend_op_array *ops TSRMLS_DC);
-
-/* Pointer to the origianl execute_internal function */
-static ZEND_DLEXPORT void (*_zend_execute_internal) (zend_execute_data *data,
-                           int ret TSRMLS_DC);
-#else
 /* Pointer to the original execute function */
 static void (*_zend_execute_ex) (zend_execute_data *execute_data TSRMLS_DC);
 
 /* Pointer to the origianl execute_internal function */
 static void (*_zend_execute_internal) (zend_execute_data *data,
                                                     zval *ret TSRMLS_DC);
-#endif
 
 /* Pointer to the original compile function */
 static zend_op_array * (*_zend_compile_file) (zend_file_handle *file_handle,
@@ -511,13 +502,8 @@ PHP_RINIT_FUNCTION(xhprof) {
   zend_compile_string = hp_compile_string;
 
   /* Replace zend_execute with our proxy */
-#if PHP_VERSION_ID < 50500
-  _zend_execute = zend_execute;
-  zend_execute  = hp_execute;
-#else
   _zend_execute_ex = zend_execute_ex;
   zend_execute_ex  = hp_execute_ex;
-#endif
 
   /* Store original zend_execute_internal, conditionally replaced later */
   _zend_execute_internal = zend_execute_internal;
@@ -1669,12 +1655,8 @@ void hp_mode_sampled_endfn_cb(hp_entry_t **entries  TSRMLS_DC) {
  *
  * @author hzhao, kannan
  */
-#if PHP_VERSION_ID < 50500
-ZEND_DLEXPORT void hp_execute (zend_op_array *ops TSRMLS_DC) {
-#else
 ZEND_DLEXPORT void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC) {
   zend_op_array *ops = &(execute_data->func->op_array);
-#endif
   zend_string   *func = NULL;
   int hp_profile_flag = 1;
   if (!hp_globals.enabled) {
@@ -1683,20 +1665,12 @@ ZEND_DLEXPORT void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC) {
 
   func = hp_get_function_name();
   if (!func) {
-#if PHP_VERSION_ID < 50500
-    _zend_execute(ops TSRMLS_CC);
-#else
     _zend_execute_ex(execute_data TSRMLS_CC);
-#endif
     return;
   }
 
   BEGIN_PROFILING(&(hp_globals.entries), func, hp_profile_flag);
-#if PHP_VERSION_ID < 50500
-  _zend_execute(ops TSRMLS_CC);
-#else
   _zend_execute_ex(execute_data TSRMLS_CC);
-#endif
   if (hp_globals.entries) {
     END_PROFILING(&(hp_globals.entries), hp_profile_flag);
   }
@@ -1713,16 +1687,9 @@ ZEND_DLEXPORT void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC) {
  * @author hzhao, kannan
  */
 
-#if PHP_VERSION_ID < 50500
-#define EX_T(offset) (*(temp_variable *)((char *) EX(Ts) + offset))
-
-ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data,
-                                       int ret TSRMLS_DC) {
-#else
 #define EX_T(offset) (*EX_TMP_VAR(execute_data, offset))
 
 ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data, zval *ret TSRMLS_DC) {
-#endif
   zend_execute_data *current_data;
   zend_string       *func = NULL;
   int    hp_profile_flag = 1;
@@ -1763,11 +1730,7 @@ ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data, zval *re
 #endif
   } else {
     /* call the old override */
-#if PHP_VERSION_ID < 50500
     _zend_execute_internal(execute_data, ret TSRMLS_CC);
-#else
-    _zend_execute_internal(execute_data, ret TSRMLS_CC);
-#endif
   }
 
   if (func) {
