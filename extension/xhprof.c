@@ -288,6 +288,11 @@ static inline zval  *hp_zval_at_key(char  *key,
 static inline char **hp_strings_in_zval(zval  *values);
 static inline void   hp_array_del(char **name_array);
 
+zend_op_array* hp_compile_file(zend_file_handle *file_handle,
+                                             int type TSRMLS_DC);
+zend_op_array* hp_compile_string(zval *source_string, char *filename TSRMLS_DC);
+void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC);
+
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xhprof_enable, 0, 0, 0)
   ZEND_ARG_INFO(0, flags)
@@ -497,6 +502,26 @@ PHP_MSHUTDOWN_FUNCTION(xhprof) {
  * Request init callback. Nothing to do yet!
  */
 PHP_RINIT_FUNCTION(xhprof) {
+  /* Replace zend_compile with our proxy */
+  _zend_compile_file = zend_compile_file;
+  zend_compile_file  = hp_compile_file;
+
+  /* Replace zend_compile_string with our proxy */
+  _zend_compile_string = zend_compile_string;
+  zend_compile_string = hp_compile_string;
+
+  /* Replace zend_execute with our proxy */
+#if PHP_VERSION_ID < 50500
+  _zend_execute = zend_execute;
+  zend_execute  = hp_execute;
+#else
+  _zend_execute_ex = zend_execute_ex;
+  zend_execute_ex  = hp_execute_ex;
+#endif
+
+  /* Store original zend_execute_internal, conditionally replaced later */
+  _zend_execute_internal = zend_execute_internal;
+
   return SUCCESS;
 }
 
@@ -504,6 +529,11 @@ PHP_RINIT_FUNCTION(xhprof) {
  * Request shutdown callback. Stop profiling and return.
  */
 PHP_RSHUTDOWN_FUNCTION(xhprof) {
+  zend_compile_file = _zend_compile_file;
+  zend_compile_string = _zend_compile_string;
+  zend_execute_ex = _zend_execute_ex;
+  zend_execute_internal = _zend_execute_internal;
+
   hp_end(TSRMLS_C);
   return SUCCESS;
 }
@@ -1763,6 +1793,10 @@ ZEND_DLEXPORT zend_op_array* hp_compile_file(zend_file_handle *file_handle,
   zend_op_array  *ret;
   int             hp_profile_flag = 1;
 
+  if (!hp_globals.enabled) {
+    return _zend_compile_file(file_handle, type TSRMLS_CC);
+  }
+
   filename = hp_get_base_filename(file_handle->filename);
   len      = strlen("load") + strlen(filename) + 3;
   func     = zend_string_alloc(len, 0);
@@ -1787,6 +1821,9 @@ ZEND_DLEXPORT zend_op_array* hp_compile_string(zval *source_string, char *filena
     int            len;
     zend_op_array *ret;
     int            hp_profile_flag = 1;
+    if (!hp_globals.enabled) {
+      return _zend_compile_string(source_string, filename TSRMLS_CC);
+    }
 
     len  = strlen("eval") + strlen(filename) + 3;
     func = zend_string_alloc(len, 0);
@@ -1820,25 +1857,7 @@ static void hp_begin(long level, long xhprof_flags TSRMLS_DC) {
     hp_globals.enabled      = 1;
     hp_globals.xhprof_flags = (uint32)xhprof_flags;
 
-    /* Replace zend_compile with our proxy */
-    _zend_compile_file = zend_compile_file;
-    zend_compile_file  = hp_compile_file;
-
-    /* Replace zend_compile_string with our proxy */
-    _zend_compile_string = zend_compile_string;
-    zend_compile_string = hp_compile_string;
-
-    /* Replace zend_execute with our proxy */
-#if PHP_VERSION_ID < 50500
-    _zend_execute = zend_execute;
-    zend_execute  = hp_execute;
-#else
-    _zend_execute_ex = zend_execute_ex;
-    zend_execute_ex  = hp_execute_ex;
-#endif
-
     /* Replace zend_execute_internal with our proxy */
-    _zend_execute_internal = zend_execute_internal;
     if (!(hp_globals.xhprof_flags & XHPROF_FLAGS_NO_BUILTINS)) {
       /* if NO_BUILTINS is not set (i.e. user wants to profile builtins),
        * then we intercept internal (builtin) function calls.
@@ -1904,16 +1923,6 @@ static void hp_stop(TSRMLS_D) {
   while (hp_globals.entries) {
     END_PROFILING(&hp_globals.entries, hp_profile_flag);
   }
-
-  /* Remove proxies, restore the originals */
-#if PHP_VERSION_ID < 50500
-  zend_execute          = _zend_execute;
-#else
-  zend_execute_ex       = _zend_execute_ex;
-#endif
-  zend_execute_internal = _zend_execute_internal;
-  zend_compile_file     = _zend_compile_file;
-  zend_compile_string   = _zend_compile_string;
 
   /* Resore cpu affinity. */
   restore_cpu_affinity(&hp_globals.prev_mask);
