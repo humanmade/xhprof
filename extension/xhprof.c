@@ -1091,7 +1091,7 @@ void hp_inc_count(zval *counts, char *name, long count TSRMLS_DC) {
   if (!ht) return;
 
   if ((data = zend_hash_find(ht, name_str)) != NULL) {
-    ZVAL_LONG(*(zval**)data, Z_LVAL_PP((zval**)data) + count);
+    ZVAL_LONG(data, Z_LVAL_P(data) + count);
   } else {
     add_assoc_long(counts, name, count);
   }
@@ -1573,7 +1573,7 @@ zval * hp_mode_shared_endfn_cb(hp_entry_t *top,
 
   ht = HASH_OF(&hp_globals.stats_count);
 
-  if ((counts_ptr = zend_hash_str_find(ht, ZSTR_VAL(symbol), ZSTR_LEN(symbol))) == NULL) {
+  if ((counts_ptr = zend_hash_str_find(ht, ZSTR_VAL(symbol), strlen(symbol->val))) == NULL) {
     counts_ptr = &counts;
     array_init(counts_ptr);
     add_assoc_zval(&hp_globals.stats_count, ZSTR_VAL(symbol), counts_ptr);
