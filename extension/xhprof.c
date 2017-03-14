@@ -1446,7 +1446,7 @@ void hp_mode_common_beginfn(hp_entry_t **entries,
   if (hp_globals.func_hash_counters[current->hash_code] > 0) {
     /* Find this symbols recurse level */
     for(p = (*entries); p; p = p->prev_hprof) {
-      if (!zend_string_equals(current->name_hprof, p->name_hprof)) {
+      if (zend_string_equals(current->name_hprof, p->name_hprof)) {
         recurse_level = (p->rlvl_hprof) + 1;
         break;
       }
