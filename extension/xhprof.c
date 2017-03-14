@@ -949,8 +949,6 @@ static zend_string *hp_get_function_name() {
        */
       if (curr_func->common.scope) {
         cls = curr_func->common.scope->name;
-      } else if (zend_get_called_scope(data)) {
-        cls = zend_get_called_scope(data)->name;
       }
 
       if (cls) {
