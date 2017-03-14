@@ -283,6 +283,7 @@ zend_op_array* hp_compile_file(zend_file_handle *file_handle,
                                              int type TSRMLS_DC);
 zend_op_array* hp_compile_string(zval *source_string, char *filename TSRMLS_DC);
 void hp_execute_ex (zend_execute_data *execute_data TSRMLS_DC);
+void hp_execute_internal(zend_execute_data *execute_data, zval *ret TSRMLS_DC);
 
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xhprof_enable, 0, 0, 0)
@@ -507,6 +508,7 @@ PHP_RINIT_FUNCTION(xhprof) {
 
   /* Store original zend_execute_internal, conditionally replaced later */
   _zend_execute_internal = zend_execute_internal;
+  zend_execute_internal = hp_execute_internal;
 
   return SUCCESS;
 }
@@ -1694,40 +1696,33 @@ ZEND_DLEXPORT void hp_execute_internal(zend_execute_data *execute_data, zval *re
   zend_string       *func = NULL;
   int    hp_profile_flag = 1;
 
+  if (!hp_globals.enabled || hp_globals.xhprof_flags & XHPROF_FLAGS_NO_BUILTINS) {
+    if (!_zend_execute_internal) {
+      /* no old override to begin with. so invoke the builtin's implementation  */
+      ((zend_internal_function *) &execute_data->func->internal_function)->handler(
+        execute_data,
+        ret TSRMLS_CC);
+    } else {
+      _zend_execute_internal(execute_data, ret TSRMLS_CC);
+    }
+    return;
+  }
+
   current_data = EG(current_execute_data);
   func = hp_get_function_name();
 
   if (func) {
+    // php_printf("%s\n", ZSTR_VAL(func));
     BEGIN_PROFILING(&hp_globals.entries, func, hp_profile_flag);
+  // } else {
+    // php_printf("UNKNOWN\n");
   }
 
   if (!_zend_execute_internal) {
     /* no old override to begin with. so invoke the builtin's implementation  */
-
-#if ZEND_EXTENSION_API_NO >= 220121212
-    /* PHP 5.5. This is just inlining a copy of execute_internal(). */
-
     ((zend_internal_function *) &execute_data->func->internal_function)->handler(
       execute_data,
       ret TSRMLS_CC);
-#elif ZEND_EXTENSION_API_NO >= 220100525
-    zend_op *opline = EX(opline);
-    temp_variable *retvar = &EX_T(opline->result.var);
-    ((zend_internal_function *) EX(function_state).function)->handler(
-                       opline->extended_value,
-                       retvar->var.ptr,
-                       (EX(function_state).function->common.fn_flags & ZEND_ACC_RETURN_REFERENCE) ?
-                       &retvar->var.ptr:NULL,
-                       EX(object), ret TSRMLS_CC);
-#else
-    zend_op *opline = EX(opline);
-    ((zend_internal_function *) EX(function_state).function)->handler(
-                       opline->extended_value,
-                       EX_T(opline->result.u.var).var.ptr,
-                       EX(function_state).function->common.return_reference ?
-                       &EX_T(opline->result.u.var).var.ptr:NULL,
-                       EX(object), ret TSRMLS_CC);
-#endif
   } else {
     /* call the old override */
     _zend_execute_internal(execute_data, ret TSRMLS_CC);
@@ -1819,14 +1814,6 @@ static void hp_begin(long level, long xhprof_flags TSRMLS_DC) {
 
     hp_globals.enabled      = 1;
     hp_globals.xhprof_flags = (uint32)xhprof_flags;
-
-    /* Replace zend_execute_internal with our proxy */
-    if (!(hp_globals.xhprof_flags & XHPROF_FLAGS_NO_BUILTINS)) {
-      /* if NO_BUILTINS is not set (i.e. user wants to profile builtins),
-       * then we intercept internal (builtin) function calls.
-       */
-      zend_execute_internal = hp_execute_internal;
-    }
 
     /* Initialize with the dummy mode first Having these dummy callbacks saves
      * us from checking if any of the callbacks are NULL everywhere. */
