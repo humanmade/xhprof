@@ -1602,6 +1602,7 @@ void hp_mode_hier_endfn_cb(hp_entry_t **entries  TSRMLS_DC) {
 
   /* Get the stat array */
   symbol = zend_string_alloc(SCRATCH_BUF_LEN, 0);
+  ZSTR_VAL(symbol)[0] = '\000';
   hp_get_function_stack(top, 2, symbol);
   if (!(counts = hp_mode_shared_endfn_cb(top,
                                          symbol  TSRMLS_CC))) {
