@@ -54,8 +54,8 @@ function my_call_user_func_array_safe($function, $args = array()) {
 
 
 class test_call_user_func {
-  function test_call_user_func($test_func = 'foo',
-                               $arg1      = 'user_func test') {
+  function __construct($test_func = 'foo',
+                       $arg1      = 'user_func test') {
     call_user_func($test_func, $arg1);
   }
 }
@@ -191,9 +191,9 @@ Part 2a output:
 foo==>bar                               : ct=       2; wt=*;
 foo==>strlen                            : ct=       1; wt=*;
 main()                                  : ct=       1; wt=*;
-main()==>test_call_user_func::test_call_user_func: ct=       1; wt=*;
+main()==>test_call_user_func::__construct: ct=       1; wt=*;
 main()==>xhprof_disable                 : ct=       1; wt=*;
-test_call_user_func::test_call_user_func==>foo: ct=       1; wt=*;
+test_call_user_func::__construct==>foo  : ct=       1; wt=*;
 
 Part 2b: Standard profile without parameters
 hello: user_func test
@@ -202,9 +202,9 @@ call_user_func==>foo                    : ct=       1; wt=*;
 foo==>bar                               : ct=       2; wt=*;
 foo==>strlen                            : ct=       1; wt=*;
 main()                                  : ct=       1; wt=*;
-main()==>test_call_user_func::test_call_user_func: ct=       1; wt=*;
+main()==>test_call_user_func::__construct: ct=       1; wt=*;
 main()==>xhprof_disable                 : ct=       1; wt=*;
-test_call_user_func::test_call_user_func==>call_user_func: ct=       1; wt=*;
+test_call_user_func::__construct==>call_user_func: ct=       1; wt=*;
 
 Part 2c: Standard profile with empty array of ignored functions
 hello: user_func test
@@ -213,9 +213,9 @@ call_user_func==>foo                    : ct=       1; wt=*;
 foo==>bar                               : ct=       2; wt=*;
 foo==>strlen                            : ct=       1; wt=*;
 main()                                  : ct=       1; wt=*;
-main()==>test_call_user_func::test_call_user_func: ct=       1; wt=*;
+main()==>test_call_user_func::__construct: ct=       1; wt=*;
 main()==>xhprof_disable                 : ct=       1; wt=*;
-test_call_user_func::test_call_user_func==>call_user_func: ct=       1; wt=*;
+test_call_user_func::__construct==>call_user_func: ct=       1; wt=*;
 
 Part 3: Ignore call_user_func_array
 hello: calling foo_array
