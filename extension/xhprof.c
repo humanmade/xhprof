@@ -870,6 +870,13 @@ static zend_string *xhprof_get_opline_name(
   }
 
   const zend_op *opline = execute_data->prev_execute_data->opline;
+
+  /* In some cases, such as functions from `create_function`
+   * opline will not be set. */
+  if (!zend_op) {
+    return NULL;
+  }
+
   const char *label;
   int include_filename = 0;
 
