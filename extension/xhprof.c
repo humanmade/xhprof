@@ -873,7 +873,7 @@ static zend_string *xhprof_get_opline_name(
 
   /* In some cases, such as functions from `create_function`
    * opline will not be set. */
-  if (!zend_op) {
+  if (!opline) {
     return NULL;
   }
 
