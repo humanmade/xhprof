@@ -869,6 +869,12 @@ static zend_string *xhprof_get_opline_name(
     return NULL;
   }
 
+  /* In some cases, the opline member is an invalid
+   * pointer to 0x1 due to unknown reasons. */
+  if (execute_data->prev_execute_data->opline == 0x1) {
+    return NULL;
+  }
+
   const zend_op *opline = execute_data->prev_execute_data->opline;
 
   /* In some cases, such as functions from `create_function`
