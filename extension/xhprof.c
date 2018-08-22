@@ -869,46 +869,42 @@ static zend_string *xhprof_get_opline_name(
     return NULL;
   }
 
-  /* In some cases, the opline member is an invalid
-   * pointer to 0x1 due to unknown reasons. */
-  if (execute_data->prev_execute_data->opline == 0x1) {
-    return NULL;
-  }
-
-  const zend_op *opline = execute_data->prev_execute_data->opline;
-
-  /* In some cases, such as functions from `create_function`
-   * opline will not be set. */
-  if (!opline) {
-    return NULL;
-  }
+  const zend_execute_data *prev = execute_data->prev_execute_data;
 
   const char *label;
   int include_filename = 0;
 
-  switch (opline->extended_value) {
-    case ZEND_EVAL:
-      label = "eval";
-      break;
-    case ZEND_INCLUDE:
-      label = "include";
-      include_filename = 1;
-      break;
-    case ZEND_REQUIRE:
-      label = "require";
-      include_filename = 1;
-      break;
-    case ZEND_INCLUDE_ONCE:
-      label = "include_once";
-      include_filename = 1;
-      break;
-    case ZEND_REQUIRE_ONCE:
-      label = "require_once";
-      include_filename = 1;
-      break;
-    default:
-      label = "(unknown-internal-op)";
-      break;
+  if (!prev->func || !ZEND_USER_CODE(prev->func->common.type)|| prev->opline->opcode != ZEND_INCLUDE_OR_EVAL) {
+    /* can happen when calling eval from a custom sapi
+     * per https://github.com/php/php-src/blob/ab8094c666048b747481df0b9da94e08cadc4160/Zend/zend_builtin_functions.c#L2376 */
+    label = "(unknown-internal-op)";
+  } else {
+    const zend_op *opline = prev->opline;
+
+    switch (opline->extended_value) {
+      case ZEND_EVAL:
+        label = "eval";
+        break;
+      case ZEND_INCLUDE:
+        label = "include";
+        include_filename = 1;
+        break;
+      case ZEND_REQUIRE:
+        label = "require";
+        include_filename = 1;
+        break;
+      case ZEND_INCLUDE_ONCE:
+        label = "include_once";
+        include_filename = 1;
+        break;
+      case ZEND_REQUIRE_ONCE:
+        label = "require_once";
+        include_filename = 1;
+        break;
+      default:
+        label = "(unknown-internal-op)";
+        break;
+    }
   }
 
   int len = strlen(label) + 2 + 1;
