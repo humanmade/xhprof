@@ -101,7 +101,8 @@
 #define XHPROF_FLAGS_MEMORY        0x0004   /* gather memory usage for funcs */
 
 /* Constants for XHPROF_MODE_SAMPLED        */
-#define XHPROF_SAMPLING_INTERVAL       100000      /* In microsecs        */
+#define XHPROF_DEFAULT_SAMPLING_INTERVAL       100000      /* In microsecs        */
+#define XHPROF_MINIMAL_SAMPLING_INTERVAL          100      /* In microsecs        */
 
 #if !defined(uint64)
 typedef unsigned long long uint64;
@@ -189,7 +190,9 @@ typedef struct hp_global_t {
   struct timeval   last_sample_time;
   uint64           last_sample_tsc;
   /* XHPROF_SAMPLING_INTERVAL in ticks */
+  long             sampling_interval;
   uint64           sampling_interval_tsc;
+  int              sampling_depth;
 
   /* This array is used to store cpu frequencies for all available logical
    * cpus.  For now, we assume the cpu frequencies will not change for power
@@ -327,6 +330,9 @@ zend_module_entry xhprof_module_entry = {
   STANDARD_MODULE_PROPERTIES
 };
 
+#define STRINGIFY_(X) #X
+#define STRINGIFY(X) STRINGIFY_(X)
+
 PHP_INI_BEGIN()
 
 /* output directory:
@@ -336,6 +342,16 @@ PHP_INI_BEGIN()
  * directory specified by this ini setting.
  */
 PHP_INI_ENTRY("xhprof.output_dir", "", PHP_INI_ALL, NULL)
+
+/* sampling_interval:
+ * Sampling interval to be used by the sampling profiler, in microseconds.
+ */
+STD_PHP_INI_ENTRY("xhprof.sampling_interval", STRINGIFY(XHPROF_DEFAULT_SAMPLING_INTERVAL), PHP_INI_ALL, OnUpdateLong, sampling_interval, hp_global_t, hp_globals)
+
+/* sampling_depth:
+ * Depth to trace call-chain by the sampling profiler
+ */
+STD_PHP_INI_ENTRY("xhprof.sampling_depth", STRINGIFY(INT_MAX), PHP_INI_ALL, OnUpdateLong, sampling_depth, hp_global_t, hp_globals)
 
 PHP_INI_END()
 
@@ -449,6 +465,10 @@ PHP_MINIT_FUNCTION(xhprof) {
     hp_globals.func_hash_counters[i] = 0;
   }
 
+  if (hp_globals.sampling_interval < XHPROF_MINIMAL_SAMPLING_INTERVAL) {
+    hp_globals.sampling_interval = XHPROF_MINIMAL_SAMPLING_INTERVAL;
+  }
+
 #if defined(DEBUG)
   /* To make it random number generator repeatable to ease testing. */
   srand(0);
@@ -520,6 +540,8 @@ PHP_MINFO_FUNCTION(xhprof)
   }
 
   php_info_print_table_end();
+
+  DISPLAY_INI_ENTRIES();
 }
 
 
@@ -847,33 +869,42 @@ static zend_string *xhprof_get_opline_name(
     return NULL;
   }
 
-  const zend_op *opline = execute_data->prev_execute_data->opline;
+  const zend_execute_data *prev = execute_data->prev_execute_data;
+
   const char *label;
   int include_filename = 0;
 
-  switch (opline->extended_value) {
-    case ZEND_EVAL:
-      label = "eval";
-      break;
-    case ZEND_INCLUDE:
-      label = "include";
-      include_filename = 1;
-      break;
-    case ZEND_REQUIRE:
-      label = "require";
-      include_filename = 1;
-      break;
-    case ZEND_INCLUDE_ONCE:
-      label = "include_once";
-      include_filename = 1;
-      break;
-    case ZEND_REQUIRE_ONCE:
-      label = "require_once";
-      include_filename = 1;
-      break;
-    default:
-      label = "(unknown-internal-op)";
-      break;
+  if (!prev->func || !ZEND_USER_CODE(prev->func->common.type)|| prev->opline->opcode != ZEND_INCLUDE_OR_EVAL) {
+    /* can happen when calling eval from a custom sapi
+     * per https://github.com/php/php-src/blob/ab8094c666048b747481df0b9da94e08cadc4160/Zend/zend_builtin_functions.c#L2376 */
+    label = "(unknown-internal-op)";
+  } else {
+    const zend_op *opline = prev->opline;
+
+    switch (opline->extended_value) {
+      case ZEND_EVAL:
+        label = "eval";
+        break;
+      case ZEND_INCLUDE:
+        label = "include";
+        include_filename = 1;
+        break;
+      case ZEND_REQUIRE:
+        label = "require";
+        include_filename = 1;
+        break;
+      case ZEND_INCLUDE_ONCE:
+        label = "include_once";
+        include_filename = 1;
+        break;
+      case ZEND_REQUIRE_ONCE:
+        label = "require_once";
+        include_filename = 1;
+        break;
+      default:
+        label = "(unknown-internal-op)";
+        break;
+    }
   }
 
   int len = strlen(label) + 2 + 1;
@@ -1019,7 +1050,7 @@ void hp_sample_stack(hp_entry_t  **entries  TSRMLS_DC) {
 
   /* Init stats in the global stats_count hashtable */
   hp_get_function_stack(*entries,
-                        INT_MAX,
+                        hp_globals.sampling_depth,
                         symbol,
                         sizeof(symbol));
 
@@ -1053,7 +1084,7 @@ void hp_sample_check(hp_entry_t **entries  TSRMLS_DC) {
     hp_globals.last_sample_tsc += hp_globals.sampling_interval_tsc;
 
     /* bump last_sample_time - HAS TO BE UPDATED BEFORE calling hp_sample_stack */
-    incr_us_interval(&hp_globals.last_sample_time, XHPROF_SAMPLING_INTERVAL);
+    incr_us_interval(&hp_globals.last_sample_time, hp_globals.sampling_interval);
 
     /* sample the stack */
     hp_sample_stack(entries  TSRMLS_CC);
@@ -1339,7 +1370,7 @@ void hp_mode_sampled_init_cb(TSRMLS_D) {
   /* Find the microseconds that need to be truncated */
   gettimeofday(&hp_globals.last_sample_time, 0);
   now = hp_globals.last_sample_time;
-  hp_trunc_time(&hp_globals.last_sample_time, XHPROF_SAMPLING_INTERVAL);
+  hp_trunc_time(&hp_globals.last_sample_time, hp_globals.sampling_interval);
 
   /* Subtract truncated time from last_sample_tsc */
   truncated_us  = get_us_interval(&hp_globals.last_sample_time, &now);
@@ -1351,7 +1382,7 @@ void hp_mode_sampled_init_cb(TSRMLS_D) {
 
   /* Convert sampling interval to ticks */
   hp_globals.sampling_interval_tsc =
-    get_tsc_from_us(XHPROF_SAMPLING_INTERVAL, cpu_freq);
+    get_tsc_from_us(hp_globals.sampling_interval, cpu_freq);
 }
 
 
