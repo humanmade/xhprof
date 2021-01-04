@@ -1109,9 +1109,16 @@ void hp_sample_check(hp_entry_t **entries  TSRMLS_DC) {
 static inline uint64 cycle_timer() {
   uint32 __a,__d;
   uint64 val;
+#if defined(__x86_64__)
   asm volatile("rdtsc" : "=a" (__a), "=d" (__d));
   (val) = ((uint64)__a) | (((uint64)__d)<<32);
   return val;
+#elif defined(__ARM_ARCH)
+  struct timeval now;
+  if (gettimeofday(&now, NULL) == 0) {
+    return now.tv_sec * 1000000 + now.tv_usec;
+  }
+#endif
 }
 
 /**
